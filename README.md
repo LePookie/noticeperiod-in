@@ -10,7 +10,7 @@ Quick-joiner intake and ranking. Node 22.13+, SQLite (built in), no native modul
 - `/` public form. `/login` team sign-in. `/admin` recruiter desk. `/legal` policy drafts.
 - Everything lives in `DATA_DIR` (default `./data`): `noticeperiod.db` plus `resumes/`. Back this folder up.
 - Teammates are added from the Team tab. Sessions last 8 hours and are stored server-side.
-- When `RESEND_API_KEY` is unset, beta mode is enabled automatically and generated sign-in codes are shown on the page for any email address. Set `BETA_TEST_MODE=false` to disable beta mode. Configure Resend and disable beta mode before public use.
+- When `RESEND_API_KEY` is unset, beta mode is enabled automatically and candidate sign-in/application skips email verification. Set `BETA_TEST_MODE=false` to require OTP verification instead. Configure Resend and disable beta mode before public use.
 
 ## Matching
 Each candidate is scored 0-100 against every open role: skill overlap 30, resume/role text similarity (TF-IDF) 20,

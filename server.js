@@ -82,6 +82,11 @@ async function sendCode(email) {
   else console.warn('[auth] RESEND_API_KEY is not configured; verification emails cannot be sent.');
   return !process.env.RESEND_API_KEY && (!PROD || BETA_TEST_MODE) ? code : undefined;
 }
+function createCandidateSession(email, res) {
+  const t = crypto.randomBytes(32).toString('hex');
+  db.prepare('insert into csessions values(?,?,?)').run(sha(t), email, Date.now() + 7 * 864e5);
+  res.setHeader('Set-Cookie', `np_me=${t}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800${PROD ? '; Secure' : ''}`);
+}
 // Resume parsing: contact details, education, and up to three jobs as {role, company, period}
 const MON = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?';
 const RANGE = new RegExp(`((?:${MON}\\s+)?(?:19|20)\\d\\d)\\s*(?:-|–|—|to)\\s*((?:${MON}\\s+)?(?:19|20)\\d\\d|present|current|now|till date)`, 'i');
@@ -143,6 +148,11 @@ app.post('/api/apply', up.single('resume'), async (req, res, next) => {
       .run(cl('name', 100), email, cl('phone', 20), bandOf(years), years, joining, ctc, b.location, cl('rolePref', 100), file, req.file.originalname,
         (await textOf(req.file)).replace(/\0/g, '').slice(0, 200000), jobText(jobs[0]), jobText(jobs[1]), jobText(jobs[2]), cl('education'), JSON.stringify(jobs));
     rescore(r.lastInsertRowid);
+    if (BETA_TEST_MODE) {
+      db.prepare('update candidates set verified=1 where email=?').run(email);
+      createCandidateSession(email, res);
+      return res.status(201).json({ ok: true, betaLogin: true });
+    }
     res.status(201).json({ ok: true, devCode: await sendCode(email) });
   } catch (e) { next(e); }
 });
@@ -153,7 +163,14 @@ app.post('/api/login', express.json({ limit: '10kb' }), async (req, res, next) =
     const email = String(req.body?.email || '').trim().toLowerCase();
     if (tooMany('o' + req.ip, 8, 9e5)) return res.status(429).json({ error: 'Too many attempts. Wait 15 minutes.' });
     if (!email_ok(email)) return bad(res, 'Enter a valid email address.');
-    res.json({ ok: true, devCode: db.prepare('select 1 from candidates where email=?').get(email) ? await sendCode(email) : undefined });
+    const exists = db.prepare('select 1 from candidates where email=?').get(email);
+    if (BETA_TEST_MODE) {
+      if (!exists) return res.status(404).json({ error: 'No account found for that email. Apply first to create one.' });
+      db.prepare('update candidates set verified=1 where email=?').run(email);
+      createCandidateSession(email, res);
+      return res.json({ ok: true, betaLogin: true });
+    }
+    res.json({ ok: true, devCode: exists ? await sendCode(email) : undefined });
   } catch (e) { next(e); }
 });
 app.post('/api/verify', express.json({ limit: '10kb' }), (req, res) => {
@@ -161,8 +178,7 @@ app.post('/api/verify', express.json({ limit: '10kb' }), (req, res) => {
   if (!o || o.expires < Date.now() || o.tries >= 5) return bad(res, 'That code has expired. Ask for a new one.');
   if (!same(sha(String(req.body.code || '').trim()), o.code)) { db.prepare('update otps set tries=tries+1 where email=?').run(email); return bad(res, 'That code is not right.'); }
   db.prepare('delete from otps where email=?').run(email); db.prepare('update candidates set verified=1 where email=?').run(email);
-  const t = crypto.randomBytes(32).toString('hex'); db.prepare('insert into csessions values(?,?,?)').run(sha(t), email, Date.now() + 7 * 864e5);
-  res.setHeader('Set-Cookie', `np_me=${t}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800${PROD ? '; Secure' : ''}`); res.json({ ok: true });
+  createCandidateSession(email, res); res.json({ ok: true });
 });
 const meOf = req => { const t = (req.headers.cookie || '').split(/;\s*/).find(c => c.startsWith('np_me='))?.slice(6);
   const s = t && db.prepare('select email, expires from csessions where token=?').get(sha(t)); return s && s.expires > Date.now() ? s.email : null; };

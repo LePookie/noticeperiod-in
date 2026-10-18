@@ -34,6 +34,7 @@ async function send() {
   try {
     const r = await fetch('/api/apply', { method: 'POST', body: new FormData(form) }), d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || 'Could not save your details.');
+    if (d.betaLogin) { location = '/me'; return; }
     $('#flow').hidden = true; $('#verify').hidden = false; $('#vmail').textContent = el('email').value; $('#vcode').focus();
     if (d.devCode) { $('#vhint').hidden = false; $('#vhint').textContent = 'Test mode: your code is ' + d.devCode; }
   } catch (e) { $('#err').textContent = e.message; b.disabled = false; b.textContent = 'Create my account'; }
