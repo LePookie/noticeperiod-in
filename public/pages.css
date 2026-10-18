@@ -1,6 +1,6 @@
 :root{--bg:#f3f6f3;--surface:#ffffff;--ink:#15211c;--muted:#55645d;--line:#d3dcd6;--accent:#1d6b55;--on-accent:#ffffff;--warm:#5b8496;--danger:#a4343a;--soft:#e6eee9;--c1:#1d6b55;--c2:#3b6ea5;--c3:#c4584c}
 :root{--gutter:clamp(1.25rem,4vw,4.5rem)}
-html{font-size:clamp(16px,.3vw + 13.6px,21px)}
+html{font-size:clamp(15px,.2vw + 13.5px,18px)}
 h1,h2,h3{font-family:'Instrument Serif',Georgia,serif;font-weight:400;letter-spacing:-.02em}
 main{max-width:90rem;padding:0 var(--gutter) 5rem}
 .top{max-width:90rem;padding:1.1rem var(--gutter);gap:1.5rem}

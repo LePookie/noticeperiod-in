@@ -4,7 +4,7 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--ink);font:400 17px/1.6 'Instrument Sans',system-ui,sans-serif;transition:background .3s,color .3s}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.6 'Instrument Sans',system-ui,sans-serif;transition:background .3s,color .3s}
 h1,h2{font-family:'Instrument Serif',Georgia,serif;font-weight:400;letter-spacing:-.01em;line-height:1.1;margin:0}
 h1{font-size:clamp(38px,6vw,64px)}
 h2{font-size:clamp(28px,4vw,38px)}

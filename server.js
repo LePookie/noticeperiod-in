@@ -15,8 +15,6 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const PUB = path.join(here, 'public');
 const PROD = process.env.NODE_ENV === 'production';
 const BETA_TEST_MODE = process.env.BETA_TEST_MODE === 'true';
-const BETA_TEST_EMAILS = new Set((process.env.BETA_TEST_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean));
-const isBetaTestEmail = email => BETA_TEST_MODE && BETA_TEST_EMAILS.has(email);
 
 // ---------- passwords and sessions ----------
 const hash = pw => { const s = crypto.randomBytes(16).toString('hex'); return `${s}:${crypto.scryptSync(pw, s, 64).toString('hex')}`; };
@@ -80,9 +78,9 @@ async function sendCode(email) {
   db.prepare('insert into otps(email,code,expires,tries) values(?,?,?,0) on conflict(email) do update set code=excluded.code, expires=excluded.expires, tries=0').run(email, sha(code), Date.now() + 6e5);
   if (process.env.RESEND_API_KEY) await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify({ from: process.env.MAIL_FROM || 'noticeperiod.in <onboarding@resend.dev>', to: email, subject: 'Your noticeperiod.in code', text: `Your code is ${code}. It expires in 10 minutes.` }) }).catch(() => {});
-  else if (!PROD || isBetaTestEmail(email)) console.log(`[dev] sign-in code for ${email}: ${code}`);
+  else if (!PROD || BETA_TEST_MODE) console.log(`[dev] sign-in code for ${email}: ${code}`);
   else console.warn('[auth] RESEND_API_KEY is not configured; verification emails cannot be sent.');
-  return !process.env.RESEND_API_KEY && (!PROD || isBetaTestEmail(email)) ? code : undefined;
+  return !process.env.RESEND_API_KEY && (!PROD || BETA_TEST_MODE) ? code : undefined;
 }
 // Resume parsing: contact details, education, and up to three jobs as {role, company, period}
 const MON = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?';
