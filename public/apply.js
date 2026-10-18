@@ -35,13 +35,12 @@ async function send() {
     const r = await fetch('/api/apply', { method: 'POST', body: new FormData(form) }), d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || 'Could not save your details.');
     if (d.betaLogin) { location = '/me'; return; }
-    $('#flow').hidden = true; $('#verify').hidden = false; $('#vmail').textContent = el('email').value; $('#vcode').focus();
-    if (d.devCode) { $('#vhint').hidden = false; $('#vhint').textContent = 'Test mode: your code is ' + d.devCode; }
+    $('#flow').hidden = true; $('#verify').hidden = false; $('#vphone').textContent = el('phone').value; $('#vhint').hidden = false; $('#vhint').textContent = 'Your code was sent on WhatsApp.'; $('#vcode').focus();
   } catch (e) { $('#err').textContent = e.message; b.disabled = false; b.textContent = 'Create my account'; }
 }
 $('#vgo').onclick = async () => {
   try {
-    const r = await fetch('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: el('email').value, code: $('#vcode').value }) }), d = await r.json();
+    const r = await fetch('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: el('phone').value, code: $('#vcode').value }) }), d = await r.json();
     if (!r.ok) throw new Error(d.error); location = '/me';
   } catch (e) { $('#verr').textContent = e.message; }
 };

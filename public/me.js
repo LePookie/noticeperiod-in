@@ -17,10 +17,10 @@ function show(c) {
 }
 async function boot() { try { show(await api('/me')); } catch { $('#login').hidden = false; } }
 $('#lf').onsubmit = async e => {
-  e.preventDefault(); $('#lerr').textContent = ''; const email = $('#lmail').value, step2 = !$('#lcodew').hidden;
+  e.preventDefault(); $('#lerr').textContent = ''; const phone = $('#lphone').value, step2 = !$('#lcodew').hidden;
   try {
-    if (!step2) { const d = await api('/login', { method: 'POST', body: { email } }); if (d.betaLogin) { await boot(); return; } $('#lcodew').hidden = false; $('#lcode').focus(); $('#lgo').textContent = 'Verify'; $('#lhint').hidden = false; $('#lhint').textContent = d.devCode ? 'Test mode: your code is ' + d.devCode : 'If that email has an account, a code is on its way.'; }
-    else { await api('/verify', { method: 'POST', body: { email, code: $('#lcode').value } }); boot(); }
+    if (!step2) { const d = await api('/login', { method: 'POST', body: { phone } }); if (d.betaLogin) { await boot(); return; } $('#lcodew').hidden = false; $('#lcode').focus(); $('#lgo').textContent = 'Verify'; $('#lhint').hidden = false; $('#lhint').textContent = d.codeSent ? 'A verification code is on its way on WhatsApp.' : 'If that phone number has an account, a code is on its way.'; }
+    else { await api('/verify', { method: 'POST', body: { phone, code: $('#lcode').value } }); boot(); }
   } catch (x) { $('#lerr').textContent = x.message; }
 };
 $('#pf').onsubmit = async e => {

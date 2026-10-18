@@ -14,7 +14,8 @@ import { fileURLToPath } from 'url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUB = path.join(here, 'public');
 const PROD = process.env.NODE_ENV === 'production';
-const BETA_TEST_MODE = process.env.BETA_TEST_MODE === 'true' || (!process.env.BETA_TEST_MODE && !process.env.RESEND_API_KEY);
+const PHONE_OTP_CONFIGURED = Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_VERIFY_SERVICE_SID);
+const BETA_TEST_MODE = process.env.BETA_TEST_MODE === 'true' || (!process.env.BETA_TEST_MODE && !PHONE_OTP_CONFIGURED);
 
 // ---------- passwords and sessions ----------
 const hash = pw => { const s = crypto.randomBytes(16).toString('hex'); return `${s}:${crypto.scryptSync(pw, s, 64).toString('hex')}`; };
@@ -72,15 +73,32 @@ async function textOf(f) {
   return ext === '.txt' ? f.buffer.toString('utf8') : '';
 }
 const bandOf = y => y === 0 ? 'Fresher' : y <= 2 ? '1-2 years' : y <= 5 ? '2-5 years' : y <= 8 ? '5-8 years' : y <= 10 ? '8-10 years' : '10+ years';
-const same = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-async function sendCode(email) {
-  const code = String(crypto.randomInt(0, 1e6)).padStart(6, '0');
-  db.prepare('insert into otps(email,code,expires,tries) values(?,?,?,0) on conflict(email) do update set code=excluded.code, expires=excluded.expires, tries=0').run(email, sha(code), Date.now() + 6e5);
-  if (process.env.RESEND_API_KEY) await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: process.env.MAIL_FROM || 'noticeperiod.in <onboarding@resend.dev>', to: email, subject: 'Your noticeperiod.in code', text: `Your code is ${code}. It expires in 10 minutes.` }) }).catch(() => {});
-  else if (!PROD || BETA_TEST_MODE) console.log(`[dev] sign-in code for ${email}: ${code}`);
-  else console.warn('[auth] RESEND_API_KEY is not configured; verification emails cannot be sent.');
-  return !process.env.RESEND_API_KEY && (!PROD || BETA_TEST_MODE) ? code : undefined;
+function normalizePhone(value) {
+  const input = String(value || '').trim(), digits = input.replace(/\D/g, '');
+  const international = input.startsWith('+') ? digits : digits.length === 10 ? `91${digits}` : digits;
+  return /^[1-9]\d{7,14}$/.test(international) ? `+${international}` : null;
+}
+function findCandidateByPhone(phone) {
+  return db.prepare('select id,email,phone from candidates order by id desc').all().find(c => normalizePhone(c.phone) === phone) || null;
+}
+async function twilioVerify(path, params) {
+  if (!PHONE_OTP_CONFIGURED) throw new Error('WhatsApp phone verification is not configured yet.');
+  const auth = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
+  const url = `https://verify.twilio.com/v2/Services/${encodeURIComponent(process.env.TWILIO_VERIFY_SERVICE_SID)}/${path}`;
+  const response = await fetch(url, { method: 'POST', headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    console.error('Twilio Verify request failed:', response.status, data.code || '', data.message || '');
+    throw new Error('WhatsApp verification could not be completed. Check the number and try again.');
+  }
+  return data;
+}
+async function startPhoneVerification(phone) {
+  return twilioVerify('Verifications', { To: phone, Channel: process.env.PHONE_OTP_CHANNEL || 'whatsapp' });
+}
+async function checkPhoneVerification(phone, code) {
+  const result = await twilioVerify('VerificationCheck', { To: phone, Code: code });
+  return result.status === 'approved';
 }
 function createCandidateSession(email, res) {
   const t = crypto.randomBytes(32).toString('hex');
@@ -134,7 +152,8 @@ app.post('/api/apply', up.single('resume'), async (req, res, next) => {
     const cl = (k, n = 300) => String(b[k] || '').trim().slice(0, n), jobs = readJobs(b);
     if (!cl('name', 100)) return bad(res, 'Add your full name.');
     if (!email_ok(email)) return bad(res, 'That email address does not look right.');
-    if (!/^\+?[\d\s-]{10,15}$/.test(b.phone || '')) return bad(res, 'Add a 10-digit phone number.');
+    const phone = normalizePhone(b.phone);
+    if (!phone) return bad(res, 'Enter a valid phone number with country code, for example +91 98765 43210.');
     if (!(years >= 0 && years <= 50)) return bad(res, 'Add your total years of experience (0 if fresher).');
     if (!cl('rolePref', 100)) return bad(res, 'Tell us the role you are looking for.');
     if (!(ctc > 0 && ctc <= 500)) return bad(res, 'Add your expected CTC in LPA, e.g. 12.5.');
@@ -145,40 +164,48 @@ app.post('/api/apply', up.single('resume'), async (req, res, next) => {
     const file = crypto.randomUUID() + path.extname(req.file.originalname).toLowerCase();
     fs.writeFileSync(path.join(DATA, 'resumes', file), req.file.buffer);
     const r = db.prepare(`insert into candidates(name,email,phone,band,years,joining,ctc,location,role_pref,resume_file,resume_name,resume_text,exp1,exp2,exp3,education,jobs) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(cl('name', 100), email, cl('phone', 20), bandOf(years), years, joining, ctc, b.location, cl('rolePref', 100), file, req.file.originalname,
+      .run(cl('name', 100), email, phone, bandOf(years), years, joining, ctc, b.location, cl('rolePref', 100), file, req.file.originalname,
         (await textOf(req.file)).replace(/\0/g, '').slice(0, 200000), jobText(jobs[0]), jobText(jobs[1]), jobText(jobs[2]), cl('education'), JSON.stringify(jobs));
     rescore(r.lastInsertRowid);
     if (BETA_TEST_MODE) {
-      db.prepare('update candidates set verified=1 where email=?').run(email);
+      db.prepare('update candidates set verified=1 where id=?').run(r.lastInsertRowid);
       createCandidateSession(email, res);
       return res.status(201).json({ ok: true, betaLogin: true });
     }
-    res.status(201).json({ ok: true, devCode: await sendCode(email) });
+    await startPhoneVerification(phone);
+    res.status(201).json({ ok: true });
   } catch (e) { next(e); }
 });
 
-// ---------- candidate accounts: email one-time code, then a session cookie ----------
+// ---------- candidate accounts: phone verification, then a session cookie ----------
 app.post('/api/login', express.json({ limit: '10kb' }), async (req, res, next) => {
   try {
-    const email = String(req.body?.email || '').trim().toLowerCase();
+    const phone = normalizePhone(req.body?.phone);
     if (tooMany('o' + req.ip, 8, 9e5)) return res.status(429).json({ error: 'Too many attempts. Wait 15 minutes.' });
-    if (!email_ok(email)) return bad(res, 'Enter a valid email address.');
-    const exists = db.prepare('select 1 from candidates where email=?').get(email);
+    if (!phone) return bad(res, 'Enter a valid phone number with country code.');
+    const candidate = findCandidateByPhone(phone);
     if (BETA_TEST_MODE) {
-      if (!exists) return res.status(404).json({ error: 'No account found for that email. Apply first to create one.' });
-      db.prepare('update candidates set verified=1 where email=?').run(email);
-      createCandidateSession(email, res);
+      if (!candidate) return res.status(404).json({ error: 'No account found for that phone number. Apply first to create one.' });
+      db.prepare('update candidates set verified=1 where id=?').run(candidate.id);
+      createCandidateSession(candidate.email, res);
       return res.json({ ok: true, betaLogin: true });
     }
-    res.json({ ok: true, devCode: exists ? await sendCode(email) : undefined });
+    if (!PHONE_OTP_CONFIGURED) return res.status(503).json({ error: 'Phone verification is not configured yet. Please try again later.' });
+    if (candidate) await startPhoneVerification(phone);
+    res.json({ ok: true, codeSent: !!candidate });
   } catch (e) { next(e); }
 });
-app.post('/api/verify', express.json({ limit: '10kb' }), (req, res) => {
-  const email = String(req.body?.email || '').trim().toLowerCase(), o = db.prepare('select * from otps where email=?').get(email);
-  if (!o || o.expires < Date.now() || o.tries >= 5) return bad(res, 'That code has expired. Ask for a new one.');
-  if (!same(sha(String(req.body.code || '').trim()), o.code)) { db.prepare('update otps set tries=tries+1 where email=?').run(email); return bad(res, 'That code is not right.'); }
-  db.prepare('delete from otps where email=?').run(email); db.prepare('update candidates set verified=1 where email=?').run(email);
-  createCandidateSession(email, res); res.json({ ok: true });
+app.post('/api/verify', express.json({ limit: '10kb' }), async (req, res, next) => {
+  try {
+    const phone = normalizePhone(req.body?.phone), code = String(req.body?.code || '').trim();
+    if (!phone || !/^\d{4,10}$/.test(code)) return bad(res, 'Enter the phone number and verification code.');
+    if (tooMany('v' + req.ip, 10, 9e5)) return res.status(429).json({ error: 'Too many attempts. Wait 15 minutes.' });
+    const candidate = findCandidateByPhone(phone);
+    if (!candidate) return bad(res, 'No account found for that phone number.');
+    if (!await checkPhoneVerification(phone, code)) return bad(res, 'That code is not right or has expired.');
+    db.prepare('update candidates set verified=1 where id=?').run(candidate.id);
+    createCandidateSession(candidate.email, res); res.json({ ok: true });
+  } catch (e) { next(e); }
 });
 const meOf = req => { const t = (req.headers.cookie || '').split(/;\s*/).find(c => c.startsWith('np_me='))?.slice(6);
   const s = t && db.prepare('select email, expires from csessions where token=?').get(sha(t)); return s && s.expires > Date.now() ? s.email : null; };

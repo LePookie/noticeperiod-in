@@ -10,7 +10,7 @@ Quick-joiner intake and ranking. Node 22.13+, SQLite (built in), no native modul
 - `/` public form. `/login` team sign-in. `/admin` recruiter desk. `/legal` policy drafts.
 - Everything lives in `DATA_DIR` (default `./data`): `noticeperiod.db` plus `resumes/`. Back this folder up.
 - Teammates are added from the Team tab. Sessions last 8 hours and are stored server-side.
-- When `RESEND_API_KEY` is unset, beta mode is enabled automatically and candidate sign-in/application skips email verification. Set `BETA_TEST_MODE=false` to require OTP verification instead. Configure Resend and disable beta mode before public use.
+- Candidate sign-in uses phone number verification over WhatsApp through Twilio Verify. Until Twilio credentials are configured, beta mode is enabled automatically and skips verification for showcase use. Before public use, configure `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_VERIFY_SERVICE_SID`, then set `BETA_TEST_MODE=false`.
 
 ## Matching
 Each candidate is scored 0-100 against every open role: skill overlap 30, resume/role text similarity (TF-IDF) 20,
