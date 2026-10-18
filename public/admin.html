@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Recruiter desk · noticeperiod.in</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet"><link rel="stylesheet" href="/style.css?v=12"><link rel="stylesheet" href="/pages.css?v=12"></head>
+<body><header class="top"><a class="logo" href="/" aria-label="noticeperiod.in">notice<span class="p">period</span><span class="t">.in</span><span class="us" aria-hidden="true">_</span></a>
+<div class="actions"><span class="muted" id="who"></span><button class="btn alt sm" id="out" type="button">Sign out</button></div></header>
+<main class="wrap">
+<div class="desk-top"><div><h1>People who can move.</h1><p class="muted" id="summary"></p></div><a class="btn" id="xl" href="/api/admin/export.xlsx">Download Excel</a></div>
+<div class="tabs"><button class="on" data-t="c">Candidates</button><button data-t="r">Open roles</button><button data-t="a">Add a role</button><button data-t="t">Team</button></div>
+
+<section id="t-c"><div class="rolechips" id="chips" aria-label="Rank candidates for a role"></div>
+<div class="bar"><label>Search<input type="text" id="q" placeholder="name, email, phone, role"></label>
+<label>Experience<select id="band"><option value="">All bands</option></select></label>
+<label>Min. years<input id="minYears" type="number" min="0" step="0.5" class="narrow"></label>
+<label>Can join within<select id="joining"><option value="">Any time</option><option value="0">Immediately</option><option value="30">1 month</option><option value="60">2 months</option><option value="90">3 months</option></select></label>
+<label>Status<select id="status"><option value="">All</option></select></label></div>
+<div class="tw"><table><thead><tr><th>Match</th><th>Candidate</th><th>Experience</th><th>Joins and CTC</th><th>City and target</th><th>Best fit</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table></div></section>
+
+<section id="t-a" hidden><div class="roleform">
+<form class="card" id="rf" autocomplete="off"><div class="rf-head"><h2 id="rt">Add a role</h2><span class="muted">Ctrl or Cmd + Enter saves and starts the next one</span></div>
+<input type="hidden" name="id"><div class="rf-grid">
+<label class="f span2">Role title<input type="text" name="title" data-roles required placeholder="e.g. Backend Engineer"></label>
+<label class="f span2">Company offering the role<input type="text" name="company" list="companies" required></label>
+<label class="f">Location<input type="text" name="location" list="locations" value="Any"></label>
+<label class="f">Openings<input type="number" name="openings" min="0" value="1"></label>
+<label class="f">Min years<input type="number" name="min_years" min="0" step="0.5" value="0"></label>
+<label class="f">Max years<input type="number" name="max_years" min="0" step="0.5" value="50"></label>
+<div class="f span4"><span class="lbl">Skills <small class="muted">press Enter or comma after each, or paste a list</small></span><div class="chipbox" id="chipbox"><input type="text" id="chipin" list="skilllist" placeholder="Add a skill"></div><input type="hidden" name="skills"></div>
+<label class="f span4">Job description <small class="muted">candidates read this on their role page</small><textarea name="description" rows="10" placeholder="What the role is, what the person will do, what you are looking for"></textarea></label>
+</div><button type="button" class="linkbtn" id="tmpl">Insert description template</button>
+<p class="err" id="rerr" role="alert"></p>
+<div class="rf-actions"><button class="btn" id="save">Save role</button><button type="button" class="btn alt" id="saveadd">Save and add another</button><button type="button" class="btn alt" id="rx">Clear</button></div></form>
+<aside><div class="card" id="preview"></div><div class="card gap"><h2>Recently added</h2><div id="recent"></div></div></aside></div>
+<datalist id="companies"></datalist><datalist id="locations"></datalist><datalist id="skilllist"></datalist></section>
+<section id="t-r" hidden><div>
+<div class="tw"><table><thead><tr><th>Role and company</th><th>Open</th><th>Location</th><th>Years</th><th>Skills</th><th></th></tr></thead><tbody id="rrows"></tbody></table></div></div>
+<p class="muted">Candidates are re-scored whenever you add, edit or remove a role.</p></section>
+
+<section id="t-t" hidden><div class="grid"><div><form class="card" id="af"><h2>Add a teammate</h2><p class="sub">They sign in with this email and password.</p>
+<label class="f">Email<input type="email" name="email" autocomplete="off" required></label><label class="f">Temporary password (10+ characters)<input type="password" name="password" autocomplete="new-password" minlength="10" required></label><button class="btn sm">Add teammate</button></form>
+<form class="card gap" id="pf"><h2>Change your password</h2><label class="f">Current password<input type="password" name="current" autocomplete="current-password" required></label>
+<label class="f">New password (10+ characters)<input type="password" name="next" autocomplete="new-password" minlength="10" required></label><button class="btn sm">Update password</button></form>
+<p id="tmsg" role="status"></p></div>
+<div class="tw"><table><thead><tr><th>Team member</th><th>Added</th><th></th></tr></thead><tbody id="team"></tbody></table></div></div></section>
+</main><script src="/suggest.js?v=12" defer></script><script src="/admin.js?v=12"></script><script src="/roleform.js?v=12"></script><script src="/fields.js?v=12"></script></body></html>

@@ -1,0 +1,27 @@
+{
+  "name": "noticeperiod-in",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env server.js",
+    "seed": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/seed.js",
+    "seed:clear": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/seed.js --clear"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "express": "^5.3.0",
+    "helmet": "^8.3.0",
+    "mammoth": "^1.13.0",
+    "multer": "^2.4.0",
+    "pdf-parse": "^1.1.1"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}
