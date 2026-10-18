@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUB = path.join(here, 'public');
 const PROD = process.env.NODE_ENV === 'production';
-const BETA_TEST_MODE = process.env.BETA_TEST_MODE === 'true';
+const BETA_TEST_MODE = process.env.BETA_TEST_MODE === 'true' || (!process.env.BETA_TEST_MODE && !process.env.RESEND_API_KEY);
 
 // ---------- passwords and sessions ----------
 const hash = pw => { const s = crypto.randomBytes(16).toString('hex'); return `${s}:${crypto.scryptSync(pw, s, 64).toString('hex')}`; };
