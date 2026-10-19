@@ -81,6 +81,9 @@ function normalizePhone(value) {
 function findCandidateByPhone(phone) {
   return db.prepare('select id,email,phone from candidates order by id desc').all().find(c => normalizePhone(c.phone) === phone) || null;
 }
+const linkedinOk = value => /^https:\/\/(?:[a-z]{2,3}\.)?linkedin\.com\/in\/[a-z0-9-_%]+\/?$/i.test(String(value || '').trim());
+const cleanSkills = value => [...new Set(String(value || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean))].slice(0, 20);
+const cleanBlocks = value => [...new Set(String(value || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean))].slice(0, 10);
 async function twilioVerify(path, params) {
   if (!PHONE_OTP_CONFIGURED) throw new Error('WhatsApp phone verification is not configured yet.');
   const auth = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
@@ -148,27 +151,38 @@ app.post('/api/parse', up.single('resume'), async (req, res, next) => {
 app.post('/api/apply', up.single('resume'), async (req, res, next) => {
   try {
     if (tooMany('a' + req.ip, 15, 36e5)) return res.status(429).json({ error: 'Too many submissions. Try again later.' });
-    const b = req.body, years = Number(b.years), joining = Number(b.joining), ctc = Number(b.ctc), email = String(b.email || '').trim().toLowerCase();
-    const cl = (k, n = 300) => String(b[k] || '').trim().slice(0, n), jobs = readJobs(b);
+    const b = req.body, years = Number(b.years), relevantYears = Number(b.relevantYears), joining = Number(b.joining), ctc = Number(b.ctc), currentCtc = Number(b.currentCtc), email = String(b.email || '').trim().toLowerCase();
+    const cl = (k, n = 300) => String(b[k] || '').trim().slice(0, n), jobs = readJobs(b), skills = cleanSkills(b.skills), blockedCompanies = cleanBlocks(b.blockedCompanies);
     if (!cl('name', 100)) return bad(res, 'Add your full name.');
     if (!email_ok(email)) return bad(res, 'That email address does not look right.');
     const phone = normalizePhone(b.phone);
     if (!phone) return bad(res, 'Enter a valid phone number with country code, for example +91 98765 43210.');
+    if (!linkedinOk(b.linkedin)) return bad(res, 'Add your LinkedIn profile URL, for example https://www.linkedin.com/in/your-name.');
     if (!(years >= 0 && years <= 50)) return bad(res, 'Add your total years of experience (0 if fresher).');
+    if (!(relevantYears >= 0 && relevantYears <= years)) return bad(res, 'Relevant experience must be between 0 and your total experience.');
+    if (!(currentCtc >= 0 && currentCtc <= 500)) return bad(res, 'Add your current CTC in LPA.');
+    if (skills.length < 2) return bad(res, 'Add at least two skills, separated by commas.');
     if (!cl('rolePref', 100)) return bad(res, 'Tell us the role you are looking for.');
     if (!(ctc > 0 && ctc <= 500)) return bad(res, 'Add your expected CTC in LPA, e.g. 12.5.');
     if (![0, 30, 60].includes(joining)) return bad(res, 'This list is for people who can join within 2 months.');
     if (!CITIES.includes(b.location)) return bad(res, 'Choose your city.');
+    if (!CITIES.includes(b.preferredLocation)) return bad(res, 'Choose your preferred work location.');
+    if (!['onsite', 'hybrid', 'remote'].includes(b.workPreference)) return bad(res, 'Choose how you prefer to work.');
     if (b.consent !== 'yes') return bad(res, 'Please tick the consent box so we can create your account.');
     if (!req.file) return bad(res, 'Attach your resume.');
+    if (db.prepare('select 1 from candidates where email=? or phone=? or linkedin=?').get(email, phone, cl('linkedin', 200))) return res.status(409).json({ error: 'An account already exists with that email, phone number or LinkedIn profile.' });
     const file = crypto.randomUUID() + path.extname(req.file.originalname).toLowerCase();
     fs.writeFileSync(path.join(DATA, 'resumes', file), req.file.buffer);
-    const r = db.prepare(`insert into candidates(name,email,phone,band,years,joining,ctc,location,role_pref,resume_file,resume_name,resume_text,exp1,exp2,exp3,education,jobs) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    const r = db.prepare(`insert into candidates(name,email,phone,band,years,joining,ctc,location,role_pref,resume_file,resume_name,resume_text,exp1,exp2,exp3,education,jobs,linkedin,relevant_years,current_ctc,skills,preferred_location,work_preference,privacy_notice_version) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(cl('name', 100), email, phone, bandOf(years), years, joining, ctc, b.location, cl('rolePref', 100), file, req.file.originalname,
-        (await textOf(req.file)).replace(/\0/g, '').slice(0, 200000), jobText(jobs[0]), jobText(jobs[1]), jobText(jobs[2]), cl('education'), JSON.stringify(jobs));
+        (await textOf(req.file)).replace(/\0/g, '').slice(0, 200000), jobText(jobs[0]), jobText(jobs[1]), jobText(jobs[2]), cl('education'), JSON.stringify(jobs), cl('linkedin', 200), relevantYears, currentCtc, JSON.stringify(skills), b.preferredLocation, b.workPreference, 'v2-draft');
+    const candidateId = r.lastInsertRowid;
+    const addBlock = db.prepare('insert or ignore into candidate_blocks(candidate_id,company_name) values(?,?)');
+    blockedCompanies.forEach(company => addBlock.run(candidateId, company));
+    db.prepare('insert into candidate_consents(candidate_id,purpose,notice_version) values(?,?,?)').run(candidateId, 'profile-processing', 'v2-draft');
     rescore(r.lastInsertRowid);
     if (BETA_TEST_MODE) {
-      db.prepare('update candidates set verified=1 where id=?').run(r.lastInsertRowid);
+      db.prepare('update candidates set verified=1 where id=?').run(candidateId);
       createCandidateSession(email, res);
       return res.status(201).json({ ok: true, betaLogin: true });
     }
@@ -213,19 +227,36 @@ const STAGE = { new: 'Profile under review', contacted: 'We have reached out to 
 const mine = (req, res) => { res.set('Cache-Control', 'no-store'); const e = meOf(req); if (!e) res.status(401).json({ error: 'Please sign in.' }); return e; };
 app.get('/api/me', (req, res) => {
   const e = mine(req, res); if (!e) return;
-  const c = db.prepare('select id,name,email,phone,years,joining,ctc,location,role_pref,jobs,education,resume_name,status,created,scores from candidates where email=? order by id desc').get(e);
-  res.json({ ...c, jobs: JSON.parse(c.jobs || '[]'), stage: STAGE[c.status] || STAGE.new, status: undefined, id: undefined, scores: JSON.parse(c.scores).slice(0, 5).map(({ id, title, company, score, skills }) => ({ id, title, company, score, skills })) });
+  const c = db.prepare('select id,name,email,phone,years,relevant_years,joining,ctc,current_ctc,location,preferred_location,work_preference,linkedin,skills,paused,role_pref,jobs,education,resume_name,status,created,scores from candidates where email=? order by id desc').get(e);
+  const blocks = db.prepare('select company_name from candidate_blocks where candidate_id=? order by company_name').all(c.id).map(row => row.company_name);
+  res.json({ ...c, jobs: JSON.parse(c.jobs || '[]'), skills: JSON.parse(c.skills || '[]'), blocks, stage: c.paused ? 'Profile paused' : (STAGE[c.status] || STAGE.new), status: undefined, id: undefined, scores: c.paused ? [] : JSON.parse(c.scores).slice(0, 5).map(({ id, title, company, score, skills }) => ({ id, title, company, score, skills })) });
 });
 app.patch('/api/me', express.json({ limit: '20kb' }), (req, res) => {
   const e = mine(req, res); if (!e) return;
-  const b = req.body, joining = Number(b.joining), ctc = Number(b.ctc), cl = (k, n = 300) => String(b[k] || '').trim().slice(0, n);
+  const b = req.body, joining = Number(b.joining), ctc = Number(b.ctc), relevantYears = Number(b.relevantYears), currentCtc = Number(b.currentCtc), skills = cleanSkills(b.skills), cl = (k, n = 300) => String(b[k] || '').trim().slice(0, n);
   if (![0, 30, 60].includes(joining)) return bad(res, 'Joining time must be immediate, 1 month or 2 months.');
   if (!(ctc > 0 && ctc <= 500)) return bad(res, 'Add your expected CTC in LPA.');
+  if (!(currentCtc >= 0 && currentCtc <= 500)) return bad(res, 'Add your current CTC in LPA.');
+  if (!(relevantYears >= 0 && relevantYears <= 50)) return bad(res, 'Add your relevant experience.');
+  if (skills.length < 2) return bad(res, 'Add at least two skills.');
   if (!CITIES.includes(b.location)) return bad(res, 'Choose your city.');
+  if (!CITIES.includes(b.preferredLocation)) return bad(res, 'Choose your preferred work location.');
+  if (!['onsite', 'hybrid', 'remote'].includes(b.workPreference)) return bad(res, 'Choose how you prefer to work.');
   if (!cl('rolePref', 100)) return bad(res, 'Tell us the role you are looking for.');
   const jobs = cleanJobs(b.jobs), id = db.prepare('select max(id) id from candidates where email=?').get(e).id;
-  db.prepare('update candidates set joining=?,ctc=?,location=?,role_pref=?,exp1=?,exp2=?,exp3=?,education=?,jobs=? where id=?').run(joining, ctc, b.location, cl('rolePref', 100), jobText(jobs[0]), jobText(jobs[1]), jobText(jobs[2]), cl('education'), JSON.stringify(jobs), id);
+  db.prepare('update candidates set joining=?,ctc=?,current_ctc=?,relevant_years=?,skills=?,location=?,preferred_location=?,work_preference=?,role_pref=?,exp1=?,exp2=?,exp3=?,education=?,jobs=? where id=?').run(joining, ctc, currentCtc, relevantYears, JSON.stringify(skills), b.location, b.preferredLocation, b.workPreference, cl('rolePref', 100), jobText(jobs[0]), jobText(jobs[1]), jobText(jobs[2]), cl('education'), JSON.stringify(jobs), id);
   rescore(id); res.json({ ok: true });
+});
+app.patch('/api/me/privacy', express.json({ limit: '10kb' }), (req, res) => {
+  const e = mine(req, res); if (!e) return;
+  const candidate = db.prepare('select id from candidates where email=? order by id desc').get(e);
+  const paused = req.body?.paused ? 1 : 0, blocks = cleanBlocks(req.body?.blockedCompanies);
+  db.prepare('update candidates set paused=? where id=?').run(paused, candidate.id);
+  db.prepare('delete from candidate_blocks where candidate_id=?').run(candidate.id);
+  const addBlock = db.prepare('insert into candidate_blocks(candidate_id,company_name) values(?,?)');
+  blocks.forEach(company => addBlock.run(candidate.id, company));
+  db.prepare('insert into candidate_consents(candidate_id,purpose,notice_version) values(?,?,?)').run(candidate.id, paused ? 'profile-paused' : 'privacy-settings-updated', 'v2-draft');
+  res.json({ ok: true, paused: Boolean(paused), blocks });
 });
 app.delete('/api/me', (req, res) => {
   const e = mine(req, res); if (!e) return;

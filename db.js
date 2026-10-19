@@ -23,9 +23,12 @@ const CITIES = ['Bengaluru', 'Hyderabad', 'Mumbai', 'Pune', 'Chennai', 'Delhi NC
 const tx = fn => { db.exec('BEGIN'); try { fn(); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; } };
 
 for (const s of ["alter table candidates add column exp1 text default ''", "alter table candidates add column exp2 text default ''", "alter table candidates add column exp3 text default ''",
-  "alter table candidates add column education text default ''", "alter table candidates add column verified integer default 0", "alter table candidates add column jobs text default '[]'", "alter table roles add column company text default ''"]) { try { db.exec(s); } catch {} }
+  "alter table candidates add column education text default ''", "alter table candidates add column verified integer default 0", "alter table candidates add column jobs text default '[]'", "alter table roles add column company text default ''",
+  "alter table candidates add column linkedin text default ''", "alter table candidates add column relevant_years real default 0", "alter table candidates add column current_ctc real default 0", "alter table candidates add column skills text default '[]'", "alter table candidates add column preferred_location text default ''", "alter table candidates add column work_preference text default 'hybrid'", "alter table candidates add column paused integer default 0", "alter table candidates add column privacy_notice_version text default 'v2-draft'"]) { try { db.exec(s); } catch {} }
 db.exec(`create table if not exists otps(email text primary key, code text, expires integer, tries integer default 0);
 create table if not exists csessions(token text primary key, email text, expires integer);
-create index if not exists c_email on candidates(email); create index if not exists c_created on candidates(created);`);
+create table if not exists candidate_blocks(id integer primary key, candidate_id integer not null references candidates(id) on delete cascade, company_name text not null, created text default (datetime('now')), unique(candidate_id, company_name));
+create table if not exists candidate_consents(id integer primary key, candidate_id integer not null references candidates(id) on delete cascade, purpose text not null, notice_version text not null, created text default (datetime('now')), revoked text);
+create index if not exists c_email on candidates(email); create index if not exists c_created on candidates(created); create unique index if not exists c_linkedin_unique on candidates(linkedin) where linkedin <> ''; create index if not exists blocks_candidate on candidate_blocks(candidate_id);`);
 
 export { db, DATA, tx, BANDS, JOIN, STATUS, CITIES };
