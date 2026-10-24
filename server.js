@@ -148,6 +148,18 @@ app.post('/api/parse', up.single('resume'), async (req, res, next) => {
     res.json(parseResume(await textOf(req.file)));
   } catch (e) { next(e); }
 });
+app.post('/api/hiring-interest', express.json({ limit: '10kb' }), (req, res) => {
+  if (tooMany('h' + req.ip, 8, 36e5)) return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+  const b = req.body || {}, clean = (value, length = 200) => String(value || '').trim().slice(0, length), email = clean(b.email).toLowerCase();
+  const personalDomains = new Set(['gmail.com', 'googlemail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com', 'proton.me', 'protonmail.com']);
+  let website;
+  try { website = new URL(clean(b.website)).href; } catch { return bad(res, 'Enter your company website, including https://.'); }
+  if (!clean(b.name, 100) || !clean(b.company, 150) || !clean(b.roleTitle, 120)) return bad(res, 'Complete your name, company and the role you need to fill.');
+  if (!email_ok(email) || personalDomains.has(email.split('@')[1])) return bad(res, 'Use your official company email address.');
+  if (!['immediate', '30', '60'].includes(clean(b.joiningTimeline, 20))) return bad(res, 'Choose the joining timeline.');
+  db.prepare('insert into hiring_interests(name,email,company,website,role_title,joining_timeline) values(?,?,?,?,?,?)').run(clean(b.name, 100), email, clean(b.company, 150), website, clean(b.roleTitle, 120), clean(b.joiningTimeline, 20));
+  res.status(201).json({ ok: true });
+});
 app.post('/api/apply', up.single('resume'), async (req, res, next) => {
   try {
     if (tooMany('a' + req.ip, 15, 36e5)) return res.status(429).json({ error: 'Too many submissions. Try again later.' });

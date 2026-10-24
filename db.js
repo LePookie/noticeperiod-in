@@ -29,6 +29,7 @@ db.exec(`create table if not exists otps(email text primary key, code text, expi
 create table if not exists csessions(token text primary key, email text, expires integer);
 create table if not exists candidate_blocks(id integer primary key, candidate_id integer not null references candidates(id) on delete cascade, company_name text not null, created text default (datetime('now')), unique(candidate_id, company_name));
 create table if not exists candidate_consents(id integer primary key, candidate_id integer not null references candidates(id) on delete cascade, purpose text not null, notice_version text not null, created text default (datetime('now')), revoked text);
+create table if not exists hiring_interests(id integer primary key, created text default (datetime('now')), name text not null, email text not null, company text not null, website text not null, role_title text not null, joining_timeline text not null, status text default 'pending');
 create index if not exists c_email on candidates(email); create index if not exists c_created on candidates(created); create unique index if not exists c_linkedin_unique on candidates(linkedin) where linkedin <> ''; create index if not exists blocks_candidate on candidate_blocks(candidate_id);`);
 
 export { db, DATA, tx, BANDS, JOIN, STATUS, CITIES };
