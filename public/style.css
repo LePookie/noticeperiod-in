@@ -41,7 +41,7 @@ details p{color:var(--muted);margin:10px 0 0;max-width:46ch}
 @keyframes rise{from{opacity:0;transform:translateY(8px)}}
 .hint{color:var(--muted);margin:8px 0 26px}
 label.f{display:block;font-weight:600;font-size:15px;margin-bottom:18px}
-input[type=text],input[type=email],input[type=tel],input[type=number],select,textarea{display:block;width:100%;margin-top:8px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:400 16px 'Instrument Sans',sans-serif}
+input:not([type]),input[type=text],input[type=email],input[type=tel],input[type=url],input[type=number],select,textarea{display:block;width:100%;margin-top:8px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:400 16px 'Instrument Sans',sans-serif}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--warm);outline-offset:0;border-color:transparent}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .lbl{display:block;font-weight:600;font-size:15px;margin-bottom:10px}
